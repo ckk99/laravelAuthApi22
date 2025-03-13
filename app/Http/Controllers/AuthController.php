@@ -70,6 +70,8 @@ class AuthController extends Controller
                 'email' => $request->email,
                 'username' => $request->username,
                 'password' => Hash::make($request->password),
+                'ip_address' => $request->ip_address,
+                'callback_url' => $request->callback_url,
                 'role' => $request->role ?? 'user', // Default role is user
             ]);
 
@@ -129,7 +131,7 @@ class AuthController extends Controller
                     'doi' => $request->doi,
                     'url' => $request->url,
                 ]);
-                //$user->update(['mid' => $data['data']['mid']]);
+                $user->update(['mid' => $res['data']['mid'] ?? null]);
 
                 return response()->json([
                     'status' => true,
@@ -144,11 +146,6 @@ class AuthController extends Controller
                     'msg' => 'Failed to create merchant. ' . $response->json()['msg']
                 ], 400);
             }
-
-            // return response()->json([
-            //     'user' => new UserResource($user),
-            //     'token' => $user->createToken('API Token')->plainTextToken
-            // ]);
         } catch (\Exception $e) {
             // Log the exception for further debugging
             Log::error("Merchant creation failed: " . $e->getMessage());

@@ -18,6 +18,8 @@ return new class extends Migration
             $table->string('phone')->nullable();
             $table->string('mid')->nullable();
             $table->string('username')->unique();
+            $table->string('ip_address')->nullable();
+            $table->string('callback_url')->nullable();
             $table->string('role')->default('user');
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');

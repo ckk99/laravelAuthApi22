@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
+use App\Models\Transaction;
 
 class ResellerPaymentController extends Controller
 {
@@ -78,7 +79,6 @@ class ResellerPaymentController extends Controller
      */
     public function createPaymentRequest(Request $request)
     {
-        // dd('dsads');
         $validation = $this->validateRequest($request, [
             'amount' => 'required|numeric|min:1|max:100000',
             'customer_name' => 'required|string',
@@ -92,6 +92,7 @@ class ResellerPaymentController extends Controller
             'rid' => env('PAYGIC_RID'),
             'mid' => env('PAYGIC_MID'),
             'merchantReferenceId' => uniqid('ref_'), // Generate unique reference ID
+            'saralPeID' => uniqid('slp_'), // Generate unique reference ID
             'amount' => $request->amount,
             'customer_name' => $request->customer_name,
             'customer_email' => $request->customer_email,
@@ -101,13 +102,65 @@ class ResellerPaymentController extends Controller
         $url = 'https://server.paygic.in/api/v2/reseller/createPaymentRequest';
 
         $response = $this->sendApiRequest($url, $payload);
-
+        Transaction::create([
+            'rid' => env('PAYGIC_RID'),
+            'mid' => env('PAYGIC_MID'),
+            'amount' => $request->amount,
+            'saralPeID' => $payload['saralPeID'],
+            'merchantReferenceId' => $payload['merchantReferenceId'],
+            'customer_name' => $payload['customer_name'],
+            'customer_email' => $payload['customer_email'],
+            'customer_mobile' => $payload['customer_mobile'],
+            'payment_mode' => 'upi',
+            'status' => 'pending',
+            'paygicReferenceId' => $response['data']['paygicReferenceId'],
+        ]);
         return response()->json([
             'message' => 'Payment request creation status',
             'data' => $response,
         ]);
     }
 
+    /**
+     * Check payment status
+     */
+
+    public function callback(Request $request)
+    {
+        // Retrieve the transaction data
+        $transactionData = $request->input('data');
+
+        // Log the transaction data for debugging
+        Log::info('Transaction Callback Received:', $transactionData);
+
+        // Process the transaction data, for example, save it to the database
+        // Assuming you have a Transaction model, you can create or update the transaction record
+        try {
+            // Example: saving the transaction to the database
+            Transaction::updateOrCreate(
+                ['paygicReferenceId' => $transactionData['paygicReferenceId']],
+                [
+                    'status' => $transactionData['txnStatus'],
+                    'payment_type' => $transactionData['type'],
+                    'payment_mode' => $transactionData['payment_mode'],
+                    'utr' => $transactionData['utr'],
+                    'payer_name' => $transactionData['payer_name'],
+                    'payee_upi' => $transactionData['payee_upi'],
+                    'success_date' => $transactionData['success_date'],
+                ]
+            );
+
+            // Return success response
+            return response()->json(['message' => 'Transaction successfully processed.'], 200);
+
+        } catch (\Exception $e) {
+            // Log the error
+            Log::error('Error processing transaction callback: ' . $e->getMessage());
+
+            // Return an error response
+            return response()->json(['error' => 'An error occurred while processing the transaction.'], 500);
+        }
+    }
     /**
      * Create a collect request
      */
@@ -137,7 +190,19 @@ class ResellerPaymentController extends Controller
         $url = 'https://server.paygic.in/api/v2/reseller/createCollectRequest';
 
         $response = $this->sendApiRequest($url, $payload);
-
+        
+        Transaction::create([
+            'rid' => env('PAYGIC_RID'),
+            'mid' => env('PAYGIC_MID'),
+            'amount' => $request->amount,
+            'merchantReferenceId' => $payload['merchantReferenceId'],
+            'customer_name' => $payload['customer_name'],
+            'customer_email' => $payload['customer_email'],
+            'customer_mobile' => $payload['customer_mobile'],
+            'payment_mode' => 'upi',
+            'status' => 'pending',
+            'paygicReferenceId' => $response['data']['paygicReferenceId'],
+        ]);
         return response()->json([
             'message' => 'Collect request creation status',
             'data' => $response,
@@ -167,80 +232,6 @@ class ResellerPaymentController extends Controller
 
         return response()->json([
             'message' => 'Payment status retrieval status',
-            'data' => $response,
-        ]);
-    }
-
-    /**
-     * Check collect status
-     */
-    public function checkCollectStatus(Request $request)
-    {
-        $validation = $this->validateRequest($request, [
-            'merchantReferenceId' => 'required|string',
-        ]);
-
-        if ($validation) return $validation;
-
-        $payload = [
-            'rid' => env('PAYGIC_RID'),
-            'mid' => env('PAYGIC_MID'),
-            'merchantReferenceId' => $request->merchantReferenceId,
-        ];
-
-        $url = 'https://server.paygic.in/api/v2/reseller/checkCollectStatus';
-
-        $response = $this->sendApiRequest($url, $payload);
-
-        return response()->json([
-            'message' => 'Collect status retrieval status',
-            'data' => $response,
-        ]);
-    }
-
-    /**
-     * Create merchant
-     */
-    public function createMerchant(Request $request)
-    {
-        $validation = $this->validateRequest($request, [
-            'bname' => 'required|string',
-            'lname' => 'required|string',
-        ]);
-
-        if ($validation) return $validation;
-
-        $payload = [
-            'rid' => $request->rid, // Reseller ID
-            'bname' => $request->bname, // Business name
-            'lname' => $request->lname, // Legal name
-            'phone' => $request->phone,
-            'email' => $request->email,
-            'mcc' => $request->mcc,
-            'type' => $request->type,
-            'city' => $request->city,
-            'district' => $request->district,
-            'stateCode' => $request->stateCode,
-            'pincode' => $request->pincode,
-            'bpan' => $request->bpan,
-            'gst' => $request->gst,
-            'account' => $request->account,
-            'ifsc' => $request->ifsc,
-            'address1' => $request->address1,
-            'address2' => $request->address2,
-            'cin' => $request->cin,
-            'msme' => $request->msme,
-            'dob' => $request->dob,
-            'doi' => $request->doi,
-            'url' => $request->url,
-        ];
-
-        $url = 'https://server.paygic.in/api/v2/reseller/createMerchant';
-
-        $response = $this->sendApiRequest($url, $payload);
-
-        return response()->json([
-            'message' => 'Merchant creation status',
             'data' => $response,
         ]);
     }
@@ -316,60 +307,4 @@ class ResellerPaymentController extends Controller
         ]);
     }
 
-    public function callback(Request $request)
-    {
-        // Validate incoming request data (optional)
-        $validation = $this->validateRequest($request, [
-            'status' => 'required|boolean',
-            'statusCode' => 'required|integer',
-            'txnStatus' => 'required|string',
-            'type' => 'required|string',
-            'msg' => 'required|string',
-            'data' => 'required|array',
-            'data.paymentType' => 'required|string',
-            'data.rid' => 'required|string',
-            'data.amount' => 'required|numeric',
-            'data.mid' => 'required|string',
-            'data.paygicReferenceId' => 'required|string',
-            'data.merchantReferenceId' => 'required|string',
-            'data.successDate' => 'required|date',
-            'data.UTR' => 'required|string',
-            'data.payerName' => 'required|string',
-            'data.payeeUPI' => 'required|string',
-        ]);
-        if ($validation) return $validation;
-        // Retrieve the transaction data
-        $transactionData = $request->input('data');
-
-        // Log the transaction data for debugging
-        Log::info('Transaction Callback Received:', $transactionData);
-
-        // Process the transaction data, for example, save it to the database
-        // Assuming you have a Transaction model, you can create or update the transaction record
-        try {
-            // Example: saving the transaction to the database
-            Transaction::create([
-                'payment_type' => $transactionData['paymentType'],
-                'rid' => $transactionData['rid'],
-                'amount' => $transactionData['amount'],
-                'mid' => $transactionData['mid'],
-                'paygic_reference_id' => $transactionData['paygicReferenceId'],
-                'merchant_reference_id' => $transactionData['merchantReferenceId'],
-                'success_date' => $transactionData['successDate'],
-                'utr' => $transactionData['UTR'],
-                'payer_name' => $transactionData['payerName'],
-                'payee_upi' => $transactionData['payeeUPI'],
-            ]);
-
-            // Return success response
-            return response()->json(['message' => 'Transaction successfully processed.'], 200);
-
-        } catch (\Exception $e) {
-            // Log the error
-            Log::error('Error processing transaction callback: ' . $e->getMessage());
-
-            // Return an error response
-            return response()->json(['error' => 'An error occurred while processing the transaction.'], 500);
-        }
-    }
 }

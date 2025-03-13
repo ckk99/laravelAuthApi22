@@ -64,8 +64,10 @@ Route::middleware(['auth:sanctum', 'role:user'])->group(function () {
     Route::prefix('reseller')->group(function () {
         Route::get('auth-token', [ResellerPaymentController::class, 'getResellerAuthToken']);
         Route::post('create-payment-request', [ResellerPaymentController::class, 'createPaymentRequest']);
+        Route::post('callback', [ResellerPaymentController::class, 'callback']);
         Route::post('create-collect-request', [ResellerPaymentController::class, 'createCollectRequest']);
         Route::post('payment-status', [ResellerPaymentController::class, 'checkPaymentStatus']);
+
         Route::post('create-merchant', [ResellerPaymentController::class, 'createMerchant']);
         Route::post('merchant-fetchIndividual', [ResellerPaymentController::class, 'merchantFetchIndividual']);
         Route::post('merchant-dueDeligence', [ResellerPaymentController::class, 'merchantDueDeligence']);
