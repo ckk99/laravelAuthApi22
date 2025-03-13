@@ -48,7 +48,7 @@ class AuthController extends Controller
             'address1' => 'required|string',
             'address2' => 'required|string',
             'cin' => 'required|string',
-            // 'msme' => 'required|string',
+            'msme' => 'required|string',
             'dob' => 'required|date',
             'doi' => 'required|date',
             'url' => 'required|url'
@@ -95,7 +95,7 @@ class AuthController extends Controller
                 'address1' => $request->address1,
                 'address2' => $request->address2,
                 'cin' => $request->cin,
-                // 'msme' => $request->msme,
+                'msme' => $request->msme,
                 'dob' => $request->dob,
                 'doi' => $request->doi,
                 'url' => $request->url,

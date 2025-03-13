@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use App\Models\Transaction;
+use Illuminate\Support\Facades\Auth;
 
 class ResellerPaymentController extends Controller
 {
@@ -87,10 +88,10 @@ class ResellerPaymentController extends Controller
         ]);
 
         if ($validation) return $validation;
-
+        $mID = Auth::user()->mid;
         $payload = [
             'rid' => env('PAYGIC_RID'),
-            'mid' => env('PAYGIC_MID'),
+            'mid' => $mID = null ? env('PAYGIC_MID') : $mID,
             'merchantReferenceId' => uniqid('ref_'), // Generate unique reference ID
             'saralPeID' => uniqid('slp_'), // Generate unique reference ID
             'amount' => $request->amount,
@@ -104,7 +105,7 @@ class ResellerPaymentController extends Controller
         $response = $this->sendApiRequest($url, $payload);
         Transaction::create([
             'rid' => env('PAYGIC_RID'),
-            'mid' => env('PAYGIC_MID'),
+            'mid' => $payload['mid'],
             'amount' => $request->amount,
             'saralPeID' => $payload['saralPeID'],
             'merchantReferenceId' => $payload['merchantReferenceId'],
@@ -174,10 +175,10 @@ class ResellerPaymentController extends Controller
         ]);
 
         if ($validation) return $validation;
-
+        $mID = Auth::user()->mid;
         $payload = [
             'rid' => env('PAYGIC_RID'),
-            'mid' => env('PAYGIC_MID'),
+            'mid' => $mID = null ? env('PAYGIC_MID') : $mID,
             'merchantReferenceId' => uniqid('ref_'), // Generate unique reference ID
             'amount' => $request->amount,
             'customer_name' => $request->customer_name,
@@ -193,7 +194,7 @@ class ResellerPaymentController extends Controller
         
         Transaction::create([
             'rid' => env('PAYGIC_RID'),
-            'mid' => env('PAYGIC_MID'),
+            'mid' => $payload['mid'],
             'amount' => $request->amount,
             'merchantReferenceId' => $payload['merchantReferenceId'],
             'customer_name' => $payload['customer_name'],
@@ -219,10 +220,10 @@ class ResellerPaymentController extends Controller
         ]);
 
         if ($validation) return $validation;
-
+        $mID = Auth::user()->mid;
         $payload = [
             'rid' => env('PAYGIC_RID'),
-            'mid' => env('PAYGIC_MID'),
+            'mid' => $mID = null ? env('PAYGIC_MID') : $mID,
             'merchantReferenceId' => $request->merchantReferenceId,
         ];
 
@@ -238,9 +239,10 @@ class ResellerPaymentController extends Controller
 
     public function merchantFetchIndividual(Request $request)
     {
+        $mID = Auth::user()->mid;
         $payload = [
             'rid' => env('PAYGIC_RID'),
-            'mid' => env('PAYGIC_MID'),
+            'mid' => $mID = null ? env('PAYGIC_MID') : $mID,
         ];
 
         $url = 'https://server.paygic.in/api/v2/reseller/merchantFetchIndividual';
@@ -268,9 +270,10 @@ class ResellerPaymentController extends Controller
         ]);
 
         if ($validation) return $validation;
+        $mID = Auth::user()->mid;
         $payload = [
             'rid' => env('PAYGIC_RID'),
-            'mid' => env('PAYGIC_MID'),
+            'mid' => $mID = null ? env('PAYGIC_MID') : $mID,
             'id' => $request->id,
             'name' => $request->name,
             'pan' => $request->pan,
@@ -292,9 +295,10 @@ class ResellerPaymentController extends Controller
 
     public function merchantCompleteOnboarding(Request $request)
     {
+        $mID = Auth::user()->mid;
         $payload = [
             'rid' => env('PAYGIC_RID'),
-            'mid' => env('PAYGIC_MID'),
+            'mid' => $mID = null ? env('PAYGIC_MID') : $mID,
         ];
 
         $url = 'https://server.paygic.in/api/v2/reseller/merchantCompleteOnboarding';
