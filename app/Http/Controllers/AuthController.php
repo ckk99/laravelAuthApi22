@@ -17,14 +17,23 @@ use App\Models\Otp;
 use App\Models\UserDetail;
 use App\Mail\OtpMail;
 use Twilio\Rest\Client;
-use App\Http\Controllers\ResellerPaymentController; 
+use App\Http\Controllers\ResellerPaymentController;
+use App\Services\CommonService;
+use Illuminate\Support\Facades\DB;
 
 
 class AuthController extends Controller
 {
+    protected $commonService;
+
+    public function __construct(CommonService $commonService)
+    {
+        $this->commonService = $commonService;
+    }
     // Register a new user
     public function register(Request $request)
     {
+        // Validate incoming request
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
@@ -48,23 +57,28 @@ class AuthController extends Controller
             'address1' => 'required|string',
             'address2' => 'required|string',
             'cin' => 'required|string',
-            'msme' => 'required|string',
+            //'msme' => 'required|string',
             'dob' => 'required|date',
             'doi' => 'required|date',
             'url' => 'required|url'
         ]);
 
+        // If validation fails, return validation errors
         if ($validator->fails()) {
             return response()->json($validator->errors(), 422);
         }
+
+        // Start the transaction
+        DB::beginTransaction();
+
         try {
-            // Instantiate the ResellerPaymentController
-            $resellerPaymentController = new ResellerPaymentController();
-            $authToken = $resellerPaymentController->getResellerAuthToken();
-           // dd($authToken);
+            // Instantiate the ResellerPaymentController and get the auth token
+            $authToken = $this->commonService->getResellerAuthToken();
             if (!$authToken) {
                 return response()->json(['message' => 'Authentication failed'], 401);
             }
+
+            // Create the user record
             $user = User::create([
                 'name' => $request->name,
                 'email' => $request->email,
@@ -75,6 +89,7 @@ class AuthController extends Controller
                 'role' => $request->role ?? 'user', // Default role is user
             ]);
 
+            // Prepare merchant data
             $url = 'https://server.paygic.in/api/v2/reseller/createMerchant';
             $data = [
                 'rid' => env('PAYGIC_RID'), // Reseller ID
@@ -95,19 +110,20 @@ class AuthController extends Controller
                 'address1' => $request->address1,
                 'address2' => $request->address2,
                 'cin' => $request->cin,
-                'msme' => $request->msme,
+                //'msme' => $request->msme,
                 'dob' => $request->dob,
                 'doi' => $request->doi,
                 'url' => $request->url,
             ];
-            $response = Http::withHeaders([
-                'token' => $authToken,
-            ])->post($url, $data);
+
+            // Make the API request to create the merchant
+            $response = Http::withHeaders(['token' => $authToken])->post($url, $data);
 
             if ($response->successful()) {
+                // If successful, get the response data
                 $res = $response->json();
-    
-                // 5. Store the merchant details in the user_details table
+
+                // Store merchant details in the user_details table
                 UserDetail::create([
                     'user_id' => $user->id,
                     'bname' => $request->bname,
@@ -131,8 +147,14 @@ class AuthController extends Controller
                     'doi' => $request->doi,
                     'url' => $request->url,
                 ]);
+
+                // Update the user's merchant ID
                 $user->update(['mid' => $res['data']['mid'] ?? null]);
 
+                // Commit the transaction
+                DB::commit();
+
+                // Return success response with user and token
                 return response()->json([
                     'status' => true,
                     'msg' => 'Merchant created successfully',
@@ -141,6 +163,8 @@ class AuthController extends Controller
                     'token' => $user->createToken('API Token')->plainTextToken
                 ]);
             } else {
+                // If merchant creation fails, roll back transaction and return error
+                DB::rollBack();
                 return response()->json([
                     'status' => false,
                     'msg' => 'Failed to create merchant. ' . $response->json()['msg']
@@ -150,6 +174,9 @@ class AuthController extends Controller
             // Log the exception for further debugging
             Log::error("Merchant creation failed: " . $e->getMessage());
 
+            // Rollback the transaction in case of an error
+            DB::rollBack();
+
             // Return error response
             return response()->json([
                 'status' => false,
@@ -157,7 +184,6 @@ class AuthController extends Controller
             ], 500);
         }
     }
-
     // Login an existing user
     public function login(Request $request)
     {

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use App\Services\CommonService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
@@ -12,75 +13,99 @@ use Illuminate\Support\Facades\Auth;
 class ResellerPaymentController extends Controller
 {
     // Helper method to get the authentication token
-    public function getResellerAuthToken()
+    // public function getResellerAuthToken()
+    // {
+    //     if ($authToken = env('PAYGIC_RID_AUTH_TOKEN')) {
+    //         return $authToken;
+    //     }
+
+    //     // Fallback to generating a new token if not available in env
+    //     $url = 'https://server.paygic.in/api/v2/reseller/createResellerAuthToken';
+    //     $data = [
+    //         'rid' => env('PAYGIC_RID'),
+    //         'password' => env('PAYGIC_RID_PASSWORD'),
+    //     ];
+
+    //     $response = Http::withHeaders(['Content-Type' => 'application/json'])->post($url, $data);
+
+    //     if ($response->successful()) {
+    //         $authToken = $response->json()['data']['token']; 
+    //         return $authToken;
+    //     }
+
+    //     // If not successful, log the error and return a default value
+    //     Log::error('Failed to get PayGic Auth Token', ['response' => $response->body()]);
+    //     return null;
+    // }
+
+    // // Reusable method to make API requests
+    // protected function sendApiRequest($url, $payload)
+    // {
+    //     $authToken = $this->getResellerAuthToken();
+    //     if (!$authToken) {
+    //         return response()->json(['message' => 'Authentication failed'], 401);
+    //     }
+
+    //     try {
+    //         $response = Http::withHeaders(['token' => $authToken])->post($url, $payload);
+
+    //         if ($response->successful()) {
+    //             return $response->json();
+    //         } else {
+    //             return response()->json([
+    //                 'message' => 'Request failed',
+    //                 'error' => $response->json(),
+    //             ], $response->status());
+    //         }
+    //     } catch (\Exception $e) {
+    //         Log::error('PayGic API request failed: ' . $e->getMessage());
+    //         return response()->json([
+    //             'message' => 'An error occurred during the API request',
+    //             'error' => $e->getMessage(),
+    //         ], 500);
+    //     }
+    // }
+
+    // // Validate the input for payment and collect requests
+    // protected function validateRequest(Request $request, $rules)
+    // {
+    //     $validator = Validator::make($request->all(), $rules);
+    //     if ($validator->fails()) {
+    //         return response()->json($validator->errors(), 422);
+    //     }
+    //     return null;
+    // }
+
+    protected $commonService;
+
+    public function __construct(CommonService $commonService)
     {
-        if ($authToken = env('PAYGIC_RID_AUTH_TOKEN')) {
-            return $authToken;
-        }
-
-        // Fallback to generating a new token if not available in env
-        $url = 'https://server.paygic.in/api/v2/reseller/createResellerAuthToken';
-        $data = [
-            'rid' => env('PAYGIC_RID'),
-            'password' => env('PAYGIC_RID_PASSWORD'),
-        ];
-
-        $response = Http::withHeaders(['Content-Type' => 'application/json'])->post($url, $data);
-
-        if ($response->successful()) {
-            $authToken = $response->json()['data']['token']; 
-            return $authToken;
-        }
-
-        // If not successful, log the error and return a default value
-        Log::error('Failed to get PayGic Auth Token', ['response' => $response->body()]);
-        return null;
+        $this->commonService = $commonService;
     }
 
-    // Reusable method to make API requests
-    protected function sendApiRequest($url, $payload)
+    public function generateToken(Request $request)
     {
-        $authToken = $this->getResellerAuthToken();
-        if (!$authToken) {
-            return response()->json(['message' => 'Authentication failed'], 401);
-        }
-
-        try {
-            $response = Http::withHeaders(['token' => $authToken])->post($url, $payload);
-
-            if ($response->successful()) {
-                return $response->json();
-            } else {
-                return response()->json([
-                    'message' => 'Request failed',
-                    'error' => $response->json(),
-                ], $response->status());
-            }
-        } catch (\Exception $e) {
-            Log::error('PayGic API request failed: ' . $e->getMessage());
+        // Call the service to get the token
+        $authToken = $this->commonService->getResellerAuthToken();
+        
+        if ($authToken) {
             return response()->json([
-                'message' => 'An error occurred during the API request',
-                'error' => $e->getMessage(),
+                'message' => 'Token generated successfully',
+                'token' => $authToken,
+            ]);
+        } else {
+            return response()->json([
+                'message' => 'Failed to generate token',
             ], 500);
         }
     }
-
-    // Validate the input for payment and collect requests
-    protected function validateRequest(Request $request, $rules)
-    {
-        $validator = Validator::make($request->all(), $rules);
-        if ($validator->fails()) {
-            return response()->json($validator->errors(), 422);
-        }
-        return null;
-    }
-
+    
     /**
      * Create a payment request
      */
     public function createPaymentRequest(Request $request)
     {
-        $validation = $this->validateRequest($request, [
+        $validation = $this->commonService->validateRequest($request, [
             'amount' => 'required|numeric|min:1|max:100000',
             'customer_name' => 'required|string',
             'customer_email' => 'required|email',
@@ -93,28 +118,27 @@ class ResellerPaymentController extends Controller
             'rid' => env('PAYGIC_RID'),
             'mid' => $mID = null ? env('PAYGIC_MID') : $mID,
             'merchantReferenceId' => uniqid('ref_'), // Generate unique reference ID
-            'saralPeID' => uniqid('slp_'), // Generate unique reference ID
             'amount' => $request->amount,
             'customer_name' => $request->customer_name,
             'customer_email' => $request->customer_email,
             'customer_mobile' => $request->customer_mobile,
         ];
 
-        $url = 'https://server.paygic.in/api/v2/reseller/createPaymentRequest';
+        $endpoint = 'reseller/createPaymentRequest';
 
-        $response = $this->sendApiRequest($url, $payload);
+        $response = $this->commonService->sendApiRequest($endpoint, $payload);
         Transaction::create([
             'rid' => env('PAYGIC_RID'),
             'mid' => $payload['mid'],
             'amount' => $request->amount,
-            'saralPeID' => $payload['saralPeID'],
+            'saralPeID' => uniqid('slp_'),
             'merchantReferenceId' => $payload['merchantReferenceId'],
             'customer_name' => $payload['customer_name'],
             'customer_email' => $payload['customer_email'],
             'customer_mobile' => $payload['customer_mobile'],
             'payment_mode' => 'upi',
             'status' => 'pending',
-            'paygicReferenceId' => $response['data']['paygicReferenceId'],
+            'paygicReferenceId' => $response['data']['paygicReferenceId'] ?? null,
         ]);
         return response()->json([
             'message' => 'Payment request creation status',
@@ -167,7 +191,7 @@ class ResellerPaymentController extends Controller
      */
     public function createCollectRequest(Request $request)
     {
-        $validation = $this->validateRequest($request, [
+        $validation = $this->commonService->validateRequest($request, [
             'amount' => 'required|numeric|min:1|max:100000',
             'customer_name' => 'required|string',
             'customer_email' => 'required|email',
@@ -188,9 +212,9 @@ class ResellerPaymentController extends Controller
             'remark' => 'Collection Payment', // Example remark
         ];
 
-        $url = 'https://server.paygic.in/api/v2/reseller/createCollectRequest';
+        $endpoint = 'reseller/createCollectRequest';
 
-        $response = $this->sendApiRequest($url, $payload);
+        $response = $this->commonService->sendApiRequest($endpoint, $payload);
         
         Transaction::create([
             'rid' => env('PAYGIC_RID'),
@@ -202,7 +226,7 @@ class ResellerPaymentController extends Controller
             'customer_mobile' => $payload['customer_mobile'],
             'payment_mode' => 'upi',
             'status' => 'pending',
-            'paygicReferenceId' => $response['data']['paygicReferenceId'],
+            'paygicReferenceId' => $response['data']['paygicReferenceId'] ?? null,  
         ]);
         return response()->json([
             'message' => 'Collect request creation status',
@@ -215,7 +239,7 @@ class ResellerPaymentController extends Controller
      */
     public function checkPaymentStatus(Request $request)
     {
-        $validation = $this->validateRequest($request, [
+        $validation = $this->commonService->validateRequest($request, [
             'merchantReferenceId' => 'required|string',
         ]);
 
@@ -227,9 +251,9 @@ class ResellerPaymentController extends Controller
             'merchantReferenceId' => $request->merchantReferenceId,
         ];
 
-        $url = 'https://server.paygic.in/api/v2/reseller/checkPaymentStatus';
+        $endpoint = 'reseller/checkPaymentStatus';
 
-        $response = $this->sendApiRequest($url, $payload);
+        $response = $this->commonService->sendApiRequest($endpoint, $payload);
 
         return response()->json([
             'message' => 'Payment status retrieval status',
@@ -237,78 +261,15 @@ class ResellerPaymentController extends Controller
         ]);
     }
 
-    public function merchantFetchIndividual(Request $request)
+    /**
+     * Get transaction details
+     */
+    public function transactionDetails(Request $request)
     {
-        $mID = Auth::user()->mid;
-        $payload = [
-            'rid' => env('PAYGIC_RID'),
-            'mid' => $mID = null ? env('PAYGIC_MID') : $mID,
-        ];
-
-        $url = 'https://server.paygic.in/api/v2/reseller/merchantFetchIndividual';
-
-        $response = $this->sendApiRequest($url, $payload);
-
+        $transaction = Transaction::get();
         return response()->json([
-            'message' => 'Merchant fetch individual status',
-            'data' => $response,
+            'message' => 'Transaction details',
+            'data' => $transaction,
         ]);
     }
-
-    public function merchantDueDeligence(Request $request)
-    {   
-        $validation = $this->validateRequest($request, [
-            // 'rid' => 'required|string',
-            // 'mid' => 'required|string',
-            'id' => 'required|string',
-            'name' => 'required|string',
-            'pan' => 'required|string',
-            'type' => 'required|string|in:AADHAAR,DRIVING_LICENSE,VOTER_ID',
-            'poa' => 'required|string',
-            'dob' => 'required|date',
-            'gender' => 'required|string|in:M,F',
-        ]);
-
-        if ($validation) return $validation;
-        $mID = Auth::user()->mid;
-        $payload = [
-            'rid' => env('PAYGIC_RID'),
-            'mid' => $mID = null ? env('PAYGIC_MID') : $mID,
-            'id' => $request->id,
-            'name' => $request->name,
-            'pan' => $request->pan,
-            'type' => $request->type,
-            'poa' => $request->poa,
-            'dob' => $request->dob,
-            'gender' => $request->gender,
-        ];
-
-        $url = 'https://server.paygic.in/api/v2/reseller/merchantDueDeligence';
-
-        $response = $this->sendApiRequest($url, $payload);
-
-        return response()->json([
-            'message' => 'Merchant due deligence status',
-            'data' => $response,
-        ]);
-    }
-
-    public function merchantCompleteOnboarding(Request $request)
-    {
-        $mID = Auth::user()->mid;
-        $payload = [
-            'rid' => env('PAYGIC_RID'),
-            'mid' => $mID = null ? env('PAYGIC_MID') : $mID,
-        ];
-
-        $url = 'https://server.paygic.in/api/v2/reseller/merchantCompleteOnboarding';
-
-        $response = $this->sendApiRequest($url, $payload);
-
-        return response()->json([
-            'message' => 'Merchant complete onboarding status',
-            'data' => $response,
-        ]);
-    }
-
 }
