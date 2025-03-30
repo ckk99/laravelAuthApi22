@@ -7,6 +7,7 @@ use App\Http\Controllers\MerchantPaymentController;
 use App\Http\Controllers\ResellerPaymentController;
 use App\Http\Controllers\TestController;
 use App\Http\Controllers\AdminController;
+use App\Http\Controllers\Api\MerchantController;
 
 /*
 |--------------------------------------------------------------------------
@@ -61,12 +62,16 @@ Route::middleware(['auth:sanctum', 'role:user'])->group(function () {
         Route::post('create-collect-request', [ResellerPaymentController::class, 'createCollectRequest']);
         Route::post('payment-status', [ResellerPaymentController::class, 'checkPaymentStatus']);
         Route::get('transaction-details', [ResellerPaymentController::class, 'transactionDetails']);
+        Route::post('reset-api-key', [ResellerPaymentController::class, 'resetApiKey']);
+        Route::post('update-callback-url', [ResellerPaymentController::class, 'updateCallbackUrl']);
+        Route::post('ip-white-list', [ResellerPaymentController::class, 'ipWhiteList']);
         
     });
 
 });
 
 
+Route::match(['get', 'post'], 'fetchMerchant', [AdminController::class, 'fetchMerchant']);
 
 // Route::post('credit-report', [TestController::class, 'getCreditReport']);
 // Route::post('experian-report', [TestController::class, 'getExperianReport']);
@@ -74,4 +79,11 @@ Route::middleware(['auth:sanctum', 'role:user'])->group(function () {
 // Route::post('states', [TestController::class, 'getStates']);
 // Route::post('cities', [TestController::class, 'getCities']);
 // Route::get('validate-bank', [TestController::class, 'validateBank']);
+
+Route::get('auth-token', [MerchantController::class, 'generateToken']);
+Route::post('create-payment-request', [MerchantController::class, 'createPaymentRequest']);
+Route::post('callback', [MerchantController::class, 'callback']);
+Route::post('create-collect-request', [MerchantController::class, 'createCollectRequest']);
+Route::post('payment-status', [MerchantController::class, 'checkPaymentStatus']);
+Route::get('transaction-details', [MerchantController::class, 'transactionDetails']);
 

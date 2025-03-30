@@ -1,17 +1,16 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Controller;
+use App\Models\User;
 use Illuminate\Http\Request;
 use App\Services\CommonService;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Validator;
-use App\Models\Transaction;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
+use App\Models\Transaction;
 
-class ResellerPaymentController extends Controller
+class MerchantController extends Controller
 {
     protected $commonService;
 
@@ -90,65 +89,40 @@ class ResellerPaymentController extends Controller
 
     public function callback(Request $request)
     {
+        // Retrieve the transaction data
+        $transactionData = $request->input('data');
+
+        // Log the transaction data for debugging
+        Log::info('Transaction Callback Received:', $transactionData);
+
+        // Process the transaction data, for example, save it to the database
+        // Assuming you have a Transaction model, you can create or update the transaction record
         try {
-            Log::info('Webhook Received:', $request->all());
+            // Example: saving the transaction to the database
+            Transaction::updateOrCreate(
+                ['paygicReferenceId' => $transactionData['paygicReferenceId']],
+                [
+                    'status' => $transactionData['txnStatus'],
+                    'payment_type' => $transactionData['type'],
+                    'payment_mode' => $transactionData['payment_mode'],
+                    'utr' => $transactionData['utr'],
+                    'payer_name' => $transactionData['payer_name'],
+                    'payee_upi' => $transactionData['payee_upi'],
+                    'success_date' => $transactionData['success_date'],
+                ]
+            );
 
-            $txnStatus = $request->input('txnStatus');
-            $message = $request->input('msg', 'No message provided');
-            $data = $request->input('data', []);
+            // Return success response
+            return response()->json(['message' => 'Transaction successfully processed.'], 200);
 
-            if (!is_array($data)) {
-                return response()->json(['error' => 'Invalid data format'], 400);
-            }
-
-            // Handle Transaction
-            if ($request->input('type') === 'TRANSACTION') {
-                $transaction = Transaction::updateOrCreate(
-                    ['merchantReferenceId' => $data['merchantReferenceId']],
-                    [
-                        'rid' => $data['rid'],
-                        'mid' => $data['mid'],
-                        'paygicReferenceId' => $data['paygicReferenceId'],
-                        'amount' => $data['amount'],
-                        'utr' => $data['UTR'] ?? null,
-                        'payerName' => $data['payerName'] ?? null,
-                        'payeeUPI' => $data['payeeUPI'] ?? null,
-                        'successDate' => isset($data['successDate'])
-                            ? \Carbon\Carbon::createFromTimestampMs($data['successDate'])->toDateTimeString()
-                            : null,
-                        'status' => $txnStatus === 'SUCCESS' ? 'SUCCESS' : 'FAIL',
-                    ]
-                );
-                return response()->json(['message' => 'Transaction stored successfully'], 200);
-            }
-
-            // Handle Settlement
-            if ($request->input('type') === 'SETTLEMENT') {
-                $settlement = Settlement::updateOrCreate(
-                    ['paygicReferenceNumber' => $data['paygicReferenceNumber']],
-                    [
-                        'mid' => $data['mid'],
-                        'rid' => $data['rid'],
-                        'amount' => $data['amount'],
-                        'utr' => $data['utr'] ?? null,
-                        'bankReferenceNumber' => $data['bankReferenceNumber'] ?? null,
-                        'mode' => $data['mode'] ?? null,
-                        'initiationDate' => isset($data['initiationDate'])
-                            ? \Carbon\Carbon::parse($data['initiationDate'])->toDateTimeString()
-                            : null,
-                        'status' => $txnStatus === 'SUCCESS' ? 'SUCCESS' : 'FAIL',
-                    ]
-                );
-                return response()->json(['message' => 'Settlement stored successfully'], 200);
-            }
-
-            return response()->json(['error' => 'Invalid transaction type'], 400);
         } catch (\Exception $e) {
-            Log::error('Error processing webhook: ' . $e->getMessage());
+            // Log the error
+            Log::error('Error processing transaction callback: ' . $e->getMessage());
+
+            // Return an error response
             return response()->json(['error' => 'An error occurred while processing the transaction.'], 500);
         }
     }
-
     /**
      * Create a collect request
      */
@@ -234,30 +208,5 @@ class ResellerPaymentController extends Controller
             'message' => 'Transaction details',
             'data' => $transaction,
         ]);
-    }
-
-    public function resetApiKey(Request $request)
-    {
-        $user = Auth::user();
-        $api_key = Str::random(60);
-        $user->api_key = $api_key;
-        $user->save();
-        return response()->json(['message' => 'API key reset successfully']);
-    }
-
-    public function updateCallbackUrl(Request $request)
-    {
-        $user = Auth::user();
-        $user->callback_url = $request->callback_url;
-        $user->save();
-        return response()->json(['message' => 'Callback URL updated successfully']);
-    }
-
-    public function ipWhiteList(Request $request)
-    {
-        $user = Auth::user();
-        $user->ip_address = $request->ip_address;
-        $user->save();
-        return response()->json(['message' => 'IP white list updated successfully']);
     }
 }

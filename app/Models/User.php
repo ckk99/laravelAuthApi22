@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
+use App\Models\UserDetail;
 
 class User extends Authenticatable
 {
@@ -25,6 +26,9 @@ class User extends Authenticatable
         'username',
         'role',
         'password',
+        'callback_url',
+        'ip_address',
+        'api_key',
     ];
 
     /**
@@ -52,6 +56,11 @@ class User extends Authenticatable
         $roles = json_decode($this->roles, true) ?? [];  // Defaults to empty array if decoding fails
         
         return in_array($role, $roles);
+    }
+
+    public function userDetail()
+    {
+        return $this->hasOne(UserDetail::class, 'user_id');
     }
 
 }

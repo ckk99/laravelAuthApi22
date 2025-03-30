@@ -317,9 +317,13 @@ class AuthController extends Controller
         if ($validator->fails()) {
             return response()->json(['error' => $validator->errors()], 422);
         }
-        // Find OTP in the database
+        
+        if (!$request->email && !$request->phone) {
+            return response()->json(['message' => 'Email or phone is required.'], 400);
+        }
+
         $otpRecord = Otp::where('otp', $request->otp)
-                        ->where(function($query) use ($request) {
+                        ->where(function ($query) use ($request) {
                             if ($request->email) {
                                 $query->where('email', $request->email);
                             }
@@ -327,30 +331,34 @@ class AuthController extends Controller
                                 $query->where('phone', $request->phone);
                             }
                         })
-                        ->where('expires_at', '>', Carbon::now())
+                        ->where('expires_at', '>', Carbon::now()) // Ensure OTP is not expired
                         ->first();
 
         if (!$otpRecord) {
             return response()->json(['message' => 'Invalid or expired OTP.'], 400);
         }
 
-        // OTP is valid, now log the user in (find user by email or phone)
-        // Find the user by email or phone
-        //dd($request->email);
-        $user = User::where('email', $request->email)
-                //->orWhere('phone', $request->phone)
-                ->first();
-        
+        $user = User::where(function ($query) use ($request) {
+                    if ($request->email) {
+                        $query->where('email', $request->email);
+                    }
+                    if ($request->phone) {
+                        $query->where('phone', $request->phone);
+                    }
+                })->first();
+
         if (!$user) {
             return response()->json(['message' => 'User not found.'], 404);
         }
-        $otpRecord->delete();  // Delete the OTP record
-        // Create and return Sanctum token
-        $token = $user->createToken('OTP Login')->plainTextToken;
+
+        $otpRecord->delete();
+
+        $token = $user->createToken('API Token')->plainTextToken;
 
         return response()->json([
             'message' => 'OTP verified successfully!',
-            'token' => $token  // This is the token for the user to use in authenticated requests
+            'user' => new UserResource($user),
+            'token' => $token  // Return the generated token
         ]);
     }
 

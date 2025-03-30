@@ -25,7 +25,7 @@ class AdminController extends Controller
         $mID = $request->mid;
         $payload = [
             'rid' => env('PAYGIC_RID'),
-            'mid' => $mID = null ? env('PAYGIC_MID') : $mID,
+            'mid' => $mID ?: env('PAYGIC_MID'),
         ];
 
         $endpoint = 'reseller/merchantFetchIndividual';
@@ -53,10 +53,10 @@ class AdminController extends Controller
         ]);
 
         if ($validation) return $validation;
-        $mID = $mID = $request->mid;;
+        $mID = $request->mid;;
         $payload = [
             'rid' => env('PAYGIC_RID'),
-            'mid' => $mID = null ? env('PAYGIC_MID') : $mID,
+            'mid' => $mID ?: env('PAYGIC_MID'),
             'id' => $request->id,
             'name' => $request->name,
             'pan' => $request->pan,
@@ -78,15 +78,15 @@ class AdminController extends Controller
 
     public function merchantCompleteOnboarding(Request $request)
     {
-        $mID = $mID = $request->mid;;
+        $mID = $request->mid;;
         $payload = [
             'rid' => env('PAYGIC_RID'),
-            'mid' => $mID = null ? env('PAYGIC_MID') : $mID,
+            'mid' => $mID ?: env('PAYGIC_MID'),
         ];
 
         $endpoint = 'reseller/merchantCompleteOnboarding';
 
-        $response = $this->sendApiRequest($endpoint, $payload);
+        $response = $this->commonService->sendApiRequest($endpoint, $payload);
 
         return response()->json([
             'message' => 'Merchant complete onboarding status',
@@ -101,6 +101,51 @@ class AdminController extends Controller
         return response()->json([
             'message' => 'Merchant transactions status',
             'data' => $transaction,
+        ]);
+    }
+
+    public function fetchMerchant(Request $request)
+    {
+        if ($request->isMethod('post')) { 
+            $validation = $this->commonService->validateRequest($request, [
+                'userId' => 'required|string',
+            ]);
+    
+            if ($validation) return $validation;
+            $users = User::where('role', 'user')
+                    ->where('id', $request->userId)
+                    ->with('userDetail')->get()->toArray();
+                
+            return response()->json([
+                'message' => 'Fetch merchant details',
+                'data' => $users,
+            ]);
+        }
+        $users = User::where('role', 'user')->with('UserDetail')->get()->toArray();
+        // dd($users);
+        // foreach ($users as $user) {
+        //     $userDetail = $user->userDetail; // Access the related UserDetail directly
+        // }
+        // $users = User::where('role', 'user')->with('userDetail')->get()->map(function ($user) {
+        //     return array_merge($user->toArray(), $user->userDetail ? $user->userDetail->toArray() : []);
+        // });
+       
+        return response()->json([
+            'message' => 'Fetch all merchants details',
+            'data' => $users,
+        ]);
+    }
+
+    public function deleteMerchant(Request $request)
+    {
+        $validation = $this->commonService->validateRequest($request, [
+            'userId' => 'required|string',
+        ]);
+
+        if ($validation) return $validation;
+        $users = User::where('id', $request->userId)->delete();
+        return response()->json([
+            'message' => 'Merchant delete status',
         ]);
     }
 }
